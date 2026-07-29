@@ -30,8 +30,26 @@ export class ApiError extends Error {
   }
 }
 
+interface ValidationErrorItem {
+  loc: (string | number)[];
+  msg: string;
+}
+
 interface ErrorBody {
-  detail?: string;
+  // Los errores simples (401/403/404/409) traen detail como string; los
+  // 422 de validacion de FastAPI traen detail como lista, uno por campo.
+  detail?: string | ValidationErrorItem[];
+}
+
+function extractDetail(body: ErrorBody | null): string {
+  const detail = body?.detail;
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail.map((item) => `${String(item.loc.at(-1))}: ${item.msg}`).join("; ");
+  }
+  return "Error inesperado";
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -63,8 +81,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const body: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const detail = (body as ErrorBody | null)?.detail ?? "Error inesperado";
-    throw new ApiError(response.status, detail);
+    throw new ApiError(response.status, extractDetail(body as ErrorBody | null));
   }
 
   return body as T;

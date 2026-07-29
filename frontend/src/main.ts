@@ -1,21 +1,26 @@
 import { setUnauthorizedHandler } from "./api/http";
 import { isAuthenticated } from "./auth/session";
-import { renderDashboardView } from "./views/dashboard-view";
 import { renderLoginView } from "./views/login-view";
+import { renderProductDetailView } from "./views/product-detail-view";
+import { renderProductListView } from "./views/product-list-view";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
 function showLogin(): void {
-  renderLoginView(app, showDashboard);
+  renderLoginView(app, showProductList);
 }
 
-function showDashboard(): void {
-  void renderDashboardView(app, showLogin);
+function showProductList(): void {
+  void renderProductListView(app, { onLoggedOut: showLogin, onSelectProduct: showProductDetail });
+}
+
+function showProductDetail(productId: number): void {
+  void renderProductDetailView(app, productId, showProductList);
 }
 
 function renderApp(): void {
   if (isAuthenticated()) {
-    showDashboard();
+    showProductList();
   } else {
     showLogin();
   }
