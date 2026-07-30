@@ -3,7 +3,7 @@
 Sistema con backend en Python/FastAPI y frontend en TypeScript + HTML + CSS
 (sin framework), sin base de datos.
 
-## Como correrlo
+## Como ejecutarlo
 
 1. Backend: ver [`backend/README.md`](backend/README.md) (`uvicorn` en el puerto 8000).
 2. Frontend: ver [`frontend/README.md`](frontend/README.md) (`npm run dev` en el puerto 5173).
@@ -17,11 +17,12 @@ Ambos deben estar corriendo al mismo tiempo; el frontend consume la API en `http
 - Logout que revoca el token (blacklist en memoria).
 - Autorizacion por rol: solo ADMIN puede `POST`/`PATCH`; `USER` recibe `403`.
 - Cualquier request sin token / invalido / expirado / revocado recibe `401`.
-- Frontend con pantalla de login, token en `sessionStorage`, interceptor que
-  agrega el token a cada request y que ante un `401` limpia la sesion y
-  redirige al login.
+- Refresh token (7 dias, rotativo) con `POST /auth/refresh`; el frontend lo
+  usa para renovar el access token de forma transparente ante un `401`, sin
+  interrumpir al usuario. Ver `backend/README.md` (seccion Autenticacion) y
+  `frontend/README.md` (seccion "Renovacion transparente del access token").
 
-## Fase 2 (actual): catalogo de productos
+## Fase 2: catalogo de productos
 
 - Backend: `GET /products` (filtro `?category=`), `GET /products/{id}`,
   `POST /products` (ADMIN) y `PATCH /products/{id}/stock` (ADMIN), con las
@@ -32,11 +33,8 @@ Ambos deben estar corriendo al mismo tiempo; el frontend consume la API en `http
   producto al hacer clic, formulario de creacion visible solo para ADMIN, y
   estados visibles de carga / error / lista vacia. Ver detalle en
   [`frontend/README.md`](frontend/README.md).
-- No se agrego ninguna libreria extra: todo se resolvio con lo que ya estaba
-  (fetch nativo via `apiFetch`, DOM manual), sin necesidad de un router ni
-  un framework de formularios para este alcance.
-
-## Proxima fase
-
-Mejoras visuales de diseno, revisar puntos de concurrencia y reforzar
-seguridad del token (ej. moverlo a cookie) — a definir cuando se indique.
+- Concurrencia: `POST /products` y `PATCH /products/{id}/stock` protegen su
+  seccion critica con `asyncio.Lock()` para evitar condiciones de carrera
+  sobre el estado en memoria compartido (nombre duplicado, stock negativo).
+  Ver detalle en [`backend/README.md`](backend/README.md) (seccion
+  Concurrencia).

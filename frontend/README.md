@@ -33,12 +33,13 @@ Genera los archivos estaticos en `dist/`.
 src/
   api/
     http.ts        # wrapper sobre fetch: agrega el header Authorization,
-                    # reacciona a 401 (limpia token + redirige) y traduce
-                    # los errores 422 de FastAPI (lista por campo) a texto
+                    # renueva el access token de forma transparente ante un
+                    # 401 (ver seccion de abajo), y traduce los errores 422
+                    # de FastAPI (lista por campo) a texto
     auth.ts         # login() / logout()
     products.ts      # listProducts() / getProduct() / createProduct() / adjustStock()
   auth/
-    session.ts        # guarda/lee el token en sessionStorage, decodifica el rol
+    session.ts        # guarda/lee access_token y refresh_token en sessionStorage, decodifica el rol
   views/
     login-view.ts            # pantalla de login
     product-list-view.ts      # tarjetas de productos + filtro por categoria +
@@ -47,6 +48,24 @@ src/
     product-detail-view.ts    # detalle de un producto + ajuste de stock (solo ADMIN)
   main.ts                     # router minimo: login <-> lista <-> detalle
 ```
+
+## Renovacion transparente del access token
+
+El access token dura 15 minutos. Cuando una request cualquiera recibe `401`
+(y no es `/auth/login` ni `/auth/refresh`), `api/http.ts` intenta renovarlo
+automaticamente antes de rendirse:
+
+1. Llama a `POST /auth/refresh` con el `refresh_token` guardado.
+2. Si el backend devuelve un par nuevo de tokens, los guarda y **reintenta la
+   request original una sola vez** con el access token nuevo.
+3. Si el refresh tambien falla (refresh token vencido, revocado o
+   inexistente), recien ahi se limpia la sesion y se redirige a login — el
+   mismo comportamiento que habia antes de esto.
+
+Si varias requests disparan un `401` al mismo tiempo (ej. dos `fetch` en
+paralelo justo cuando expira el token), no se generan multiples refresh
+concurrentes: todas esperan la misma promesa compartida (`refreshInFlight`),
+y solo la primera ejecuta la llamada real a `/auth/refresh`.
 
 ## Reglas de UI por rol
 

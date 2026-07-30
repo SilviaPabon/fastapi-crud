@@ -6,9 +6,15 @@
  * cumple ese mismo rol: es el punto unico por el que pasa cada request.
  */
 
-import { clearToken, getToken } from "../auth/session";
+import { clearTokens, getRefreshToken, getToken, saveTokens } from "../auth/session";
 
 const BASE_URL = "http://localhost:8000";
+
+// Endpoints de auth que no deben disparar el flujo de refresh ante un 401:
+// /login porque un 401 ahi es "credenciales invalidas" (no "token vencido"),
+// y /refresh porque si el propio refresh token es invalido no tiene sentido
+// intentar renovarlo con si mismo (evita un loop).
+const AUTH_ENDPOINTS_WITHOUT_REFRESH = new Set(["/auth/login", "/auth/refresh"]);
 
 /**
  * Callback que el router (main.ts) registra para saber como volver a la
@@ -52,24 +58,69 @@ function extractDetail(body: ErrorBody | null): string {
   return "Error inesperado";
 }
 
-export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
+interface RefreshResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+}
 
-  // 1) Requisito "agregar el token en cada request": si hay token guardado,
-  //    se inyecta el header Authorization: Bearer antes de salir al backend.
+// Requests concurrentes que reciben 401 al mismo tiempo (ej. dos fetch en
+// paralelo cuando expira el access token) no deben disparar N llamadas a
+// /auth/refresh: todas esperan esta misma promesa compartida, y solo la
+// primera realmente la ejecuta.
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  const response = await fetch(`${BASE_URL}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  if (!response.ok) return null;
+
+  const data = (await response.json()) as RefreshResponse;
+  saveTokens(data.access_token, data.refresh_token);
+  return data.access_token;
+}
+
+function getOrCreateRefresh(): Promise<string | null> {
+  refreshInFlight ??= refreshAccessToken().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+function buildRequest(options: RequestInit, token: string | null): RequestInit {
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
+  return { ...options, headers };
+}
 
-  const response = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  let response = await fetch(`${BASE_URL}${path}`, buildRequest(options, getToken()));
 
-  // 2) Requisito "si recibe 401, limpiar el token y redirigir a login":
-  //    pase lo que pase (token ausente, invalido, expirado o revocado), el
-  //    backend siempre responde 401 y aqui se reacciona igual en todos los casos.
+  // Renovacion transparente: si el access token esta vencido (401) y el
+  // endpoint no es /auth/login ni /auth/refresh, se intenta renovarlo una
+  // vez con el refresh token guardado y se reintenta la request original.
+  if (response.status === 401 && !AUTH_ENDPOINTS_WITHOUT_REFRESH.has(path)) {
+    const newAccessToken = await getOrCreateRefresh();
+    if (newAccessToken) {
+      response = await fetch(`${BASE_URL}${path}`, buildRequest(options, newAccessToken));
+    }
+  }
+
+  // Si sigue en 401 (no habia refresh token, tambien expiro/fue revocado,
+  // o el reintento volvio a fallar), se limpia la sesion y se redirige a
+  // login, igual que antes.
   if (response.status === 401) {
-    clearToken();
+    clearTokens();
     onUnauthorized();
     throw new ApiError(401, "No autenticado");
   }

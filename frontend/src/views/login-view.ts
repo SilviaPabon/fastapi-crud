@@ -1,6 +1,6 @@
 import { ApiError } from "../api/http";
 import { login } from "../api/auth";
-import { saveToken } from "../auth/session";
+import { saveTokens } from "../auth/session";
 
 export function renderLoginView(app: HTMLElement, onLoginSuccess: () => void): void {
   app.innerHTML = `
@@ -32,7 +32,7 @@ export function renderLoginView(app: HTMLElement, onLoginSuccess: () => void): v
 
     try {
       const token = await login({ username: usernameInput.value, password: passwordInput.value });
-      saveToken(token.access_token);
+      saveTokens(token.access_token, token.refresh_token);
       onLoginSuccess();
     } catch (error) {
       const message =

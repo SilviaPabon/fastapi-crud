@@ -30,6 +30,27 @@ def revoke_token(jti: str) -> None:
     _revoked_jtis.add(jti)
 
 
+# Refresh tokens vigentes: jti -> username. A diferencia de la blacklist de
+# access tokens (que guarda lo invalido), aqui se guarda lo valido: un jti
+# presente = puede usarse una vez para pedir un access token nuevo. Al
+# usarse se elimina (rotacion: cada refresh token sirve una sola vez), lo
+# mismo que al revocarlo explicitamente (logout).
+_refresh_tokens: dict[str, str] = {}
+
+
+def store_refresh_token(jti: str, username: str) -> None:
+    _refresh_tokens[jti] = username
+
+
+def pop_refresh_token(jti: str) -> str | None:
+    """Devuelve el username asociado a ese jti y lo invalida (uso unico)."""
+    return _refresh_tokens.pop(jti, None)
+
+
+def revoke_refresh_token(jti: str) -> None:
+    _refresh_tokens.pop(jti, None)
+
+
 def get_token_payload(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> dict:

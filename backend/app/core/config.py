@@ -14,6 +14,10 @@ ALGORITHM = "HS256"
 # Vida util del access token, en minutos. Requisito de la prueba: 15 min.
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 
+# Vida util del refresh token, en dias. Se usa solo para pedir un access
+# token nuevo via /auth/refresh, nunca para autenticar requests directamente.
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+
 # Origenes permitidos por CORS para que el frontend (Vite) pueda llamar a la API.
 CORS_ORIGINS = [
     "http://localhost:5173",

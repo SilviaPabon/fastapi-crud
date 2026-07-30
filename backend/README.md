@@ -32,8 +32,9 @@ cd backend
 
 ### Autenticacion
 
-- `POST /auth/login` — recibe `{ "username", "password" }`, devuelve `{ "access_token", "token_type", "expires_in" }`. El token expira en 15 minutos.
-- `POST /auth/logout` — requiere `Authorization: Bearer <token>`. Revoca el token (en memoria) para que deje de ser valido.
+- `POST /auth/login` — recibe `{ "username", "password" }`, devuelve `{ "access_token", "refresh_token", "token_type", "expires_in" }`. El access token expira en 15 minutos, el refresh token en 7 dias.
+- `POST /auth/refresh` — recibe `{ "refresh_token" }`, devuelve un par nuevo de `access_token`/`refresh_token`. El refresh token se **rota**: se invalida al usarlo (un mismo refresh token solo sirve una vez), asi que un reuso del mismo token devuelve `401`. Tambien devuelve `401` si el token no es de tipo `refresh` (ej. si se manda un access token), si esta vencido, o si ya fue usado/revocado.
+- `POST /auth/logout` — requiere `Authorization: Bearer <token>`. Revoca el access token (en memoria). Si ademas se manda `{ "refresh_token" }` en el body, tambien lo revoca (si no se hace, ese refresh token seguiria vigente y podria generar access tokens nuevos despues del logout).
 - Cualquier request sin token, con token invalido, expirado o revocado devuelve `401 Unauthorized`.
 
 ### Catalogo de productos
@@ -53,6 +54,10 @@ Modelo `Product`: `{ "id", "name", "category", "price", "stock" }`. Sin base de 
 
 Cualquiera de los endpoints anteriores devuelve `401 Unauthorized` si el token es ausente, invalido, expirado o revocado (misma logica de `auth/dependencies.py`).
 
+### Concurrencia
+
+`POST /products` y `PATCH /products/{id}/stock` protegen su seccion critica (leer -> validar regla de negocio -> escribir sobre la lista en memoria compartida) con un `asyncio.Lock()` (`_products_lock` en `app/products/router.py`). Sin el lock, dos requests concurrentes podrian leer el mismo estado antes de que ninguna escriba (ej. dos altas con el mismo nombre pasando ambas el chequeo de duplicado, o dos ajustes de stock dejandolo negativo). Probado con 10 `PATCH /stock` de `delta: -1` disparados en paralelo sobre un stock de 19: terminan en 9, sin condiciones de carrera.
+
 ## Estructura
 
 ```
@@ -62,9 +67,9 @@ app/
     security.py   # crear/decodificar JWT
   auth/
     users.py         # usuarios mock
-    schemas.py        # modelos Pydantic (login, token, usuario)
-    dependencies.py   # get_current_user / require_role -> 401 y 403
-    router.py         # /auth/login, /auth/logout
+    schemas.py        # modelos Pydantic (login, token, refresh, usuario)
+    dependencies.py   # get_current_user / require_role -> 401 y 403; store de refresh tokens
+    router.py         # /auth/login, /auth/refresh, /auth/logout
   products/
     schemas.py         # modelos Pydantic (ProductCreate, StockAdjust, Product)
     store.py           # almacenamiento en memoria + reglas (nombre duplicado, etc.)

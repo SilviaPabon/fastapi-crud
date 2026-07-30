@@ -1,7 +1,7 @@
 import { ApiError } from "../api/http";
 import { logout as logoutRequest } from "../api/auth";
 import { createProduct, listProducts, type Product, type ProductCreate } from "../api/products";
-import { clearToken, getTokenPayload } from "../auth/session";
+import { clearTokens, getTokenPayload } from "../auth/session";
 
 interface ProductListCallbacks {
   onLoggedOut: () => void;
@@ -129,7 +129,7 @@ export async function renderProductListView(app: HTMLElement, callbacks: Product
       // sesion local: el objetivo del boton es que el usuario quede
       // deslogueado en el frontend pase lo que pase en el backend.
     }
-    clearToken();
+    clearTokens();
     callbacks.onLoggedOut();
   });
 

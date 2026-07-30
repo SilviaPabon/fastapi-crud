@@ -5,7 +5,12 @@ from uuid import uuid4
 
 import jwt
 
-from app.core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
+from app.core.config import (
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    ALGORITHM,
+    REFRESH_TOKEN_EXPIRE_DAYS,
+    SECRET_KEY,
+)
 
 
 def create_access_token(username: str, role: str) -> tuple[str, int]:
@@ -36,7 +41,33 @@ def create_access_token(username: str, role: str) -> tuple[str, int]:
 def decode_access_token(token: str) -> dict:
     """Decodifica y valida la firma + expiracion del token.
 
-    Deja que jwt.ExpiredSignatureError y jwt.InvalidTokenError se propaguen:
-    quien llama (app/auth/dependencies.py) decide como traducirlos a HTTP 401.
+    Sirve tanto para access tokens como refresh tokens (misma firma/algoritmo):
+    quien llama distingue cual es por el claim "type". Deja que
+    jwt.ExpiredSignatureError y jwt.InvalidTokenError se propaguen: quien
+    llama (app/auth/dependencies.py, app/auth/router.py) decide como
+    traducirlos a HTTP 401.
     """
     return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+
+def create_refresh_token(username: str) -> tuple[str, str, int]:
+    """Genera un refresh token firmado, de vida mas larga que el access token.
+
+    Lleva "type": "refresh" para que nadie pueda usarlo como si fuera un
+    access token normal (se valida explicitamente en /auth/refresh). El jti
+    se usa para poder invalidarlo/rotarlo del lado del servidor.
+
+    Devuelve (token, jti, expires_in_segundos).
+    """
+    now = datetime.now(timezone.utc)
+    expire_delta = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    jti = str(uuid4())
+    payload = {
+        "sub": username,
+        "type": "refresh",
+        "jti": jti,
+        "iat": now,
+        "exp": now + expire_delta,
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return token, jti, int(expire_delta.total_seconds())
