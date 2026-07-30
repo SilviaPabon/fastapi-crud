@@ -1,21 +1,17 @@
 /**
  * Manejo de la sesion en el frontend.
  *
- * access_token y refresh_token se guardan en sessionStorage: sobreviven a un
- * refresh de la pagina (a diferencia de una variable JS en memoria) pero
- * desaparecen al cerrar la pestana/navegador (a diferencia de localStorage).
- * Es un punto intermedio razonable para este caso.
- *
- * Nota de seguridad: cualquier dato en sessionStorage/localStorage es
- * legible por JS, por lo que un XSS podria robar los tokens igual que si
- * estuvieran en memoria pero accesibles globalmente. La proteccion real
- * contra eso es evitar XSS (sanitizar inputs, CSP, etc.), no el lugar de
- * almacenamiento. Migrar el refresh_token a una cookie HttpOnly queda
- * pendiente para la fase de seguridad.
+ * El refresh_token vive en una cookie HttpOnly puesta por el backend: JS no
+ * puede leerla ni escribirla (por diseno, ver app/auth/router.py), asi que
+ * ni siquiera aparece en este archivo. El access_token se guarda solo en
+ * una variable de modulo (memoria): nunca toca sessionStorage/localStorage,
+ * asi que un XSS que ejecute JS arbitrario no puede leerlo escaneando el
+ * storage. El costo es que se pierde al recargar la pagina; por eso
+ * api/http.ts pide uno nuevo automaticamente al arrancar la app usando la
+ * cookie de refresh (ver tryRestoreSession en main.ts).
  */
 
-const TOKEN_KEY = "access_token";
-const REFRESH_TOKEN_KEY = "refresh_token";
+let accessToken: string | null = null;
 
 export type Role = "ADMIN" | "USER";
 
@@ -26,22 +22,16 @@ interface TokenPayload {
   jti: string;
 }
 
-export function saveTokens(accessToken: string, refreshToken: string): void {
-  sessionStorage.setItem(TOKEN_KEY, accessToken);
-  sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+export function setAccessToken(token: string | null): void {
+  accessToken = token;
 }
 
 export function getToken(): string | null {
-  return sessionStorage.getItem(TOKEN_KEY);
+  return accessToken;
 }
 
-export function getRefreshToken(): string | null {
-  return sessionStorage.getItem(REFRESH_TOKEN_KEY);
-}
-
-export function clearTokens(): void {
-  sessionStorage.removeItem(TOKEN_KEY);
-  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+export function clearToken(): void {
+  accessToken = null;
 }
 
 export function isAuthenticated(): boolean {

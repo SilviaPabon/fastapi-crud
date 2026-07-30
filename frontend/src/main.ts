@@ -1,5 +1,4 @@
-import { setUnauthorizedHandler } from "./api/http";
-import { isAuthenticated } from "./auth/session";
+import { setUnauthorizedHandler, tryRestoreSession } from "./api/http";
 import { renderLoginView } from "./views/login-view";
 import { renderProductDetailView } from "./views/product-detail-view";
 import { renderProductListView } from "./views/product-list-view";
@@ -18,8 +17,13 @@ function showProductDetail(productId: number): void {
   void renderProductDetailView(app, productId, showProductList);
 }
 
-function renderApp(): void {
-  if (isAuthenticated()) {
+// El access_token vive solo en memoria (nunca en storage), asi que se
+// pierde en cada recarga de pagina. Al arrancar la app se intenta reponerlo
+// en silencio con la cookie HttpOnly del refresh token (tryRestoreSession);
+// si funciona, el usuario sigue logueado sin volver a escribir credenciales.
+async function renderApp(): Promise<void> {
+  const restored = await tryRestoreSession();
+  if (restored) {
     showProductList();
   } else {
     showLogin();
@@ -31,4 +35,4 @@ function renderApp(): void {
 // parte de "redirigir", volviendo a renderizar la pantalla de login.
 setUnauthorizedHandler(showLogin);
 
-renderApp();
+await renderApp();

@@ -18,6 +18,12 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 15
 # token nuevo via /auth/refresh, nunca para autenticar requests directamente.
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
+# El refresh token viaja como cookie HttpOnly (no como JSON en el body): asi
+# JS no puede leerlo ni un XSS podria robarlo. path="/auth" porque solo lo
+# necesitan /auth/refresh y /auth/logout, no el resto de la API.
+REFRESH_COOKIE_NAME = "refresh_token"
+REFRESH_COOKIE_PATH = "/auth"
+
 # Origenes permitidos por CORS para que el frontend (Vite) pueda llamar a la API.
 CORS_ORIGINS = [
     "http://localhost:5173",

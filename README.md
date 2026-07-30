@@ -21,6 +21,11 @@ Ambos deben estar corriendo al mismo tiempo; el frontend consume la API en `http
   usa para renovar el access token de forma transparente ante un `401`, sin
   interrumpir al usuario. Ver `backend/README.md` (seccion Autenticacion) y
   `frontend/README.md` (seccion "Renovacion transparente del access token").
+- Seguridad de tokens: el refresh token viaja en una cookie `HttpOnly`
+  (invisible a JS, mitiga robo por XSS) en vez de sessionStorage; el access
+  token vive solo en memoria en el frontend (nunca en storage persistente).
+  Ver `backend/README.md` ("Por que cookie y no JSON") y `frontend/README.md`
+  ("Por que hay un vite.config.ts con proxy").
 
 ## Fase 2: catalogo de productos
 
@@ -38,3 +43,10 @@ Ambos deben estar corriendo al mismo tiempo; el frontend consume la API en `http
   sobre el estado en memoria compartido (nombre duplicado, stock negativo).
   Ver detalle en [`backend/README.md`](backend/README.md) (seccion
   Concurrencia).
+
+## Fase 3: seguridad del token y diseno
+
+- Diseno: paleta de colores centralizada en variables CSS, tipografia y
+  espaciados mas cuidados, estados hover/focus en botones/inputs/tarjetas, y
+  ajustes responsive basicos. Sin cambios de estructura ni dependencias
+  nuevas.

@@ -1,4 +1,3 @@
-import { getRefreshToken } from "../auth/session";
 import { apiFetch } from "./http";
 
 export interface LoginRequest {
@@ -8,7 +7,6 @@ export interface LoginRequest {
 
 export interface TokenResponse {
   access_token: string;
-  refresh_token: string;
   token_type: string;
   expires_in: number;
 }
@@ -21,11 +19,7 @@ export function login(credentials: LoginRequest): Promise<TokenResponse> {
 }
 
 export function logout(): Promise<void> {
-  // Se manda el refresh_token para que el backend tambien lo revoque: sin
-  // esto, seguiria vigente y podria usarse para pedir access tokens nuevos
-  // despues del logout.
-  return apiFetch<void>("/auth/logout", {
-    method: "POST",
-    body: JSON.stringify({ refresh_token: getRefreshToken() }),
-  });
+  // El refresh_token va en una cookie HttpOnly: el navegador la manda solo
+  // (credentials: "include", ver api/http.ts), no hace falta mandarla a mano.
+  return apiFetch<void>("/auth/logout", { method: "POST" });
 }

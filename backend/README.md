@@ -32,10 +32,12 @@ cd backend
 
 ### Autenticacion
 
-- `POST /auth/login` — recibe `{ "username", "password" }`, devuelve `{ "access_token", "refresh_token", "token_type", "expires_in" }`. El access token expira en 15 minutos, el refresh token en 7 dias.
-- `POST /auth/refresh` — recibe `{ "refresh_token" }`, devuelve un par nuevo de `access_token`/`refresh_token`. El refresh token se **rota**: se invalida al usarlo (un mismo refresh token solo sirve una vez), asi que un reuso del mismo token devuelve `401`. Tambien devuelve `401` si el token no es de tipo `refresh` (ej. si se manda un access token), si esta vencido, o si ya fue usado/revocado.
-- `POST /auth/logout` — requiere `Authorization: Bearer <token>`. Revoca el access token (en memoria). Si ademas se manda `{ "refresh_token" }` en el body, tambien lo revoca (si no se hace, ese refresh token seguiria vigente y podria generar access tokens nuevos despues del logout).
+- `POST /auth/login` — recibe `{ "username", "password" }`, devuelve `{ "access_token", "token_type", "expires_in" }` en el body y ademas setea una cookie `refresh_token` (`HttpOnly`, `SameSite=Lax`, `path=/auth`, 7 dias). El access token expira en 15 minutos.
+- `POST /auth/refresh` — no recibe body: lee el refresh token de la cookie, y devuelve un `access_token` nuevo (+ setea una cookie `refresh_token` nueva). El refresh token se **rota**: se invalida al leerlo (un mismo refresh token solo sirve una vez), asi que un reuso del mismo token devuelve `401`. Tambien devuelve `401` si falta la cookie, si el token no es de tipo `refresh` (ej. si se manda un access token), si esta vencido, o si ya fue usado/revocado.
+- `POST /auth/logout` — requiere `Authorization: Bearer <token>`. Revoca el access token (en memoria) y, si hay cookie `refresh_token`, tambien la revoca y la borra del navegador (sin esto, ese refresh token seguiria vigente y podria generar access tokens nuevos despues del logout).
 - Cualquier request sin token, con token invalido, expirado o revocado devuelve `401 Unauthorized`.
+
+**Por que cookie y no JSON:** el refresh token es el credential de mayor duracion (7 dias); si viviera en `sessionStorage`/`localStorage` o en el body de una respuesta JSON accesible a JS, un XSS podria robarlo con solo leer el storage. Como cookie `HttpOnly`, JS no puede leerla ni escribirla, asi que ese vector queda cerrado. El costo es que las cookies viajan solas en cada request al mismo origen/sitio, lo que reintroduce riesgo de CSRF en `POST`/`PATCH` — mitigado aqui con `SameSite=Lax` (el navegador no la manda en requests cross-site de terceros) y con el proxy de Vite en dev (ver `frontend/vite.config.ts`), que hace que frontend y backend sean el mismo origen desde la perspectiva del navegador.
 
 ### Catalogo de productos
 
@@ -67,9 +69,9 @@ app/
     security.py   # crear/decodificar JWT
   auth/
     users.py         # usuarios mock
-    schemas.py        # modelos Pydantic (login, token, refresh, usuario)
+    schemas.py        # modelos Pydantic (login, token, usuario)
     dependencies.py   # get_current_user / require_role -> 401 y 403; store de refresh tokens
-    router.py         # /auth/login, /auth/refresh, /auth/logout
+    router.py         # /auth/login, /auth/refresh, /auth/logout (cookie HttpOnly del refresh token)
   products/
     schemas.py         # modelos Pydantic (ProductCreate, StockAdjust, Product)
     store.py           # almacenamiento en memoria + reglas (nombre duplicado, etc.)

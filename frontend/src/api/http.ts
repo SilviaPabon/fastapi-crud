@@ -6,9 +6,12 @@
  * cumple ese mismo rol: es el punto unico por el que pasa cada request.
  */
 
-import { clearTokens, getRefreshToken, getToken, saveTokens } from "../auth/session";
+import { clearToken, getToken, setAccessToken } from "../auth/session";
 
-const BASE_URL = "http://localhost:8000";
+// Relativo: en dev, vite.config.ts hace de proxy hacia el backend para que
+// el navegador vea todo como el mismo origen (necesario para que la cookie
+// HttpOnly del refresh token viaje con SameSite=Lax).
+const BASE_URL = "";
 
 // Endpoints de auth que no deben disparar el flujo de refresh ante un 401:
 // /login porque un 401 ahi es "credenciales invalidas" (no "token vencido"),
@@ -60,7 +63,6 @@ function extractDetail(body: ErrorBody | null): string {
 
 interface RefreshResponse {
   access_token: string;
-  refresh_token: string;
   token_type: string;
   expires_in: number;
 }
@@ -71,19 +73,22 @@ interface RefreshResponse {
 // primera realmente la ejecuta.
 let refreshInFlight: Promise<string | null> | null = null;
 
+/**
+ * Pide un access token nuevo usando el refresh token de la cookie HttpOnly
+ * (credentials: "include" hace que el navegador la mande sola; JS nunca la
+ * toca directamente). Devuelve null si no hay cookie valida (no logueado,
+ * expirada, revocada, o ya usada).
+ */
 async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
-
   const response = await fetch(`${BASE_URL}/auth/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
+    credentials: "include",
   });
   if (!response.ok) return null;
 
   const data = (await response.json()) as RefreshResponse;
-  saveTokens(data.access_token, data.refresh_token);
+  setAccessToken(data.access_token);
   return data.access_token;
 }
 
@@ -100,7 +105,9 @@ function buildRequest(options: RequestInit, token: string | null): RequestInit {
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  return { ...options, headers };
+  // Necesario para que el navegador mande (y el backend pueda setear) la
+  // cookie HttpOnly del refresh token en /auth/refresh y /auth/logout.
+  return { ...options, headers, credentials: "include" };
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -120,7 +127,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   // o el reintento volvio a fallar), se limpia la sesion y se redirige a
   // login, igual que antes.
   if (response.status === 401) {
-    clearTokens();
+    clearToken();
     onUnauthorized();
     throw new ApiError(401, "No autenticado");
   }
@@ -136,4 +143,15 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   }
 
   return body as T;
+}
+
+/**
+ * Intenta restaurar la sesion al arrancar la app (F5, primera carga) usando
+ * la cookie de refresh: el access_token vive solo en memoria, asi que se
+ * pierde en cada recarga de pagina; esto lo repone sin pedirle credenciales
+ * al usuario de nuevo. Devuelve true si logro restaurarla.
+ */
+export async function tryRestoreSession(): Promise<boolean> {
+  const token = await getOrCreateRefresh();
+  return token !== null;
 }

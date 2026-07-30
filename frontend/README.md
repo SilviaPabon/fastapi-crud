@@ -39,7 +39,9 @@ src/
     auth.ts         # login() / logout()
     products.ts      # listProducts() / getProduct() / createProduct() / adjustStock()
   auth/
-    session.ts        # guarda/lee access_token y refresh_token en sessionStorage, decodifica el rol
+    session.ts        # access_token en memoria (variable de modulo, nunca en
+                       # storage); el refresh_token vive en una cookie HttpOnly
+                       # que este archivo ni siquiera puede leer
   views/
     login-view.ts            # pantalla de login
     product-list-view.ts      # tarjetas de productos + filtro por categoria +
@@ -47,25 +49,46 @@ src/
                                # estados de carga / error / lista vacia
     product-detail-view.ts    # detalle de un producto + ajuste de stock (solo ADMIN)
   main.ts                     # router minimo: login <-> lista <-> detalle
+vite.config.ts                # proxy /auth y /products -> backend en dev
+                               # (ver seccion de cookies mas abajo)
 ```
 
 ## Renovacion transparente del access token
 
-El access token dura 15 minutos. Cuando una request cualquiera recibe `401`
-(y no es `/auth/login` ni `/auth/refresh`), `api/http.ts` intenta renovarlo
-automaticamente antes de rendirse:
+El access token dura 15 minutos y vive **solo en memoria** (una variable de
+modulo en `auth/session.ts`, nunca en `sessionStorage`/`localStorage`): un
+XSS que consiga ejecutar JS arbitrario no puede robarlo escaneando el
+storage del navegador. La contrapartida es que se pierde en cada recarga de
+pagina (F5), asi que `main.ts` lo repone en silencio al arrancar la app
+(`tryRestoreSession()`) usando el refresh token de la cookie, sin pedirle
+credenciales de nuevo al usuario.
 
-1. Llama a `POST /auth/refresh` con el `refresh_token` guardado.
-2. Si el backend devuelve un par nuevo de tokens, los guarda y **reintenta la
-   request original una sola vez** con el access token nuevo.
-3. Si el refresh tambien falla (refresh token vencido, revocado o
-   inexistente), recien ahi se limpia la sesion y se redirige a login — el
-   mismo comportamiento que habia antes de esto.
+Cuando una request cualquiera recibe `401` (y no es `/auth/login` ni
+`/auth/refresh`), `api/http.ts` intenta renovar el access token antes de
+rendirse:
+
+1. Llama a `POST /auth/refresh` con `credentials: "include"`: el navegador
+   manda solo la cookie `refresh_token`, JS nunca la toca directamente.
+2. Si el backend devuelve un access token nuevo, lo guarda en memoria y
+   **reintenta la request original una sola vez**.
+3. Si el refresh tambien falla (cookie vencida, revocada o inexistente),
+   recien ahi se limpia la sesion y se redirige a login.
 
 Si varias requests disparan un `401` al mismo tiempo (ej. dos `fetch` en
 paralelo justo cuando expira el token), no se generan multiples refresh
 concurrentes: todas esperan la misma promesa compartida (`refreshInFlight`),
 y solo la primera ejecuta la llamada real a `/auth/refresh`.
+
+### Por que hay un `vite.config.ts` con proxy
+
+El backend setea el refresh token como cookie `HttpOnly` + `SameSite=Lax`
+(ver `backend/README.md`). `SameSite=Lax` solo se manda en requests
+same-site; en dev, frontend (`localhost:5173`) y backend (`127.0.0.1:8000`)
+son puertos/hosts distintos, es decir, otro origen. El proxy de Vite
+resuelve esto: el frontend llama a rutas relativas (`/auth/...`,
+`/products/...`) que el propio servidor de Vite reenvia al backend, asi que
+para el navegador la cookie nunca sale de `localhost:5173` — sigue siendo
+same-site sin necesitar `SameSite=None` ni HTTPS local.
 
 ## Reglas de UI por rol
 
