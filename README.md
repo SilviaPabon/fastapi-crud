@@ -21,7 +21,7 @@ Ambos deben estar corriendo al mismo tiempo; el frontend consume la API en `http
   agrega el token a cada request y que ante un `401` limpia la sesion y
   redirige al login.
 
-## Fase 2 (actual): catalogo de productos
+## Fase 2: catalogo de productos
 
 - Backend: `GET /products` (filtro `?category=`), `GET /products/{id}`,
   `POST /products` (ADMIN) y `PATCH /products/{id}/stock` (ADMIN), con las
@@ -32,11 +32,7 @@ Ambos deben estar corriendo al mismo tiempo; el frontend consume la API en `http
   producto al hacer clic, formulario de creacion visible solo para ADMIN, y
   estados visibles de carga / error / lista vacia. Ver detalle en
   [`frontend/README.md`](frontend/README.md).
-- No se agrego ninguna libreria extra: todo se resolvio con lo que ya estaba
-  (fetch nativo via `apiFetch`, DOM manual), sin necesidad de un router ni
-  un framework de formularios para este alcance.
 
-## Proxima fase
+## Branch feat/bonus-features
 
-Mejoras visuales de diseno, revisar puntos de concurrencia y reforzar
-seguridad del token (ej. moverlo a cookie) — a definir cuando se indique.
+En esta rama se tienen cambios en la experiencia de usuario y manejo de cookies con httpOnly. Asimismo se implementó la funcionalidad de refresh_token junto con el manejo de concurrencia en algunas funcionalidades para mantener la coherencia en el stock.

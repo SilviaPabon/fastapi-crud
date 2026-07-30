@@ -17,6 +17,11 @@ python3 -m venv .venv
 cd backend
 .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
+o
+```bash
+cd backend
+fastapi dev
+```
 
 - API: http://127.0.0.1:8000
 - Docs interactivas (Swagger): http://127.0.0.1:8000/docs
